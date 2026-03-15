@@ -1,0 +1,52 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// 题目表
+model Question {
+  id          Int      @id @default(autoincrement())
+  content     String   @db.Text        // 题目内容
+  standardAns String   @db.Text        // 标准答案
+  category    String   @default("专业课") // 专业课 | 综合素质
+  tags        String?  @db.VarChar(255) // 标签，逗号分隔
+  createdAt   DateTime @default(now())
+
+  reviews     Review[]
+
+  @@map("questions")
+}
+
+// 复习记录表 (SM-2 记忆曲线)
+model Review {
+  id            Int      @id @default(autoincrement())
+  questionId    Int
+  status        Int      @default(0)    // 0-不知道, 1-模糊, 2-熟练
+  easeFactor    Float    @default(2.5)  // SM-2 难度因子
+  interval      Int      @default(0)    // 复习间隔(天)
+  repetitions   Int      @default(0)    // 连续正确次数
+  nextReview    DateTime @default(now()) // 下次复习时间
+  lastAnswer    String?  @db.Text       // 上次回答内容
+  lastAiReview  String?  @db.Text       // 上次 AI 评价
+  updatedAt     DateTime @updatedAt
+
+  question      Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId])
+  @@map("reviews")
+}
+
+// 模拟考试记录表
+model ExamRecord {
+  id           Int      @id @default(autoincrement())
+  questions    String   @db.Text       // JSON: [{questionId, content, userAnswer}]
+  totalScore   Int      @default(0)    // 总分 0-100
+  aiEvaluation String?  @db.Text       // AI 综合评价
+  createdAt    DateTime @default(now())
+
+  @@map("exam_records")
+}
