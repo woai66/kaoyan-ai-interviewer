@@ -99,7 +99,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* 操作入口 */}
       <div className="action-grid slide-up">
         <Link href="/review?category=专业课" style={{ textDecoration: 'none', color: 'inherit' }}>
           <div className="card action-card review-action">
@@ -120,6 +119,13 @@ export default function Home() {
             <div className="action-icon">🎯</div>
             <div className="action-title">模拟考场</div>
             <div className="action-desc">模拟真实面试，两道综合素质题，AI 考官打分（满分100）</div>
+          </div>
+        </Link>
+        <Link href="/review?category=专业课&onlyVague=true" style={{ textDecoration: 'none', color: 'inherit' }}>
+          <div className="card action-card error-action">
+            <div className="action-icon">🔥</div>
+            <div className="action-title">专业课错题本</div>
+            <div className="action-desc">集中抽出你标记为「不知道」或「模糊」的题目进行强化复习</div>
           </div>
         </Link>
       </div>

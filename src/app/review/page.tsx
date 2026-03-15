@@ -15,6 +15,10 @@ interface Question {
 function ReviewContent() {
   const searchParams = useSearchParams();
   const category = searchParams.get('category') || '专业课';
+  const onlyVague = searchParams.get('onlyVague') === 'true';
+
+  const [mode, setMode] = useState<'sm2' | 'sequential' | 'random'>('sm2');
+  const [lastId, setLastId] = useState(0);
 
   const [question, setQuestion] = useState<Question | null>(null);
   const [userAnswer, setUserAnswer] = useState('');
@@ -23,6 +27,7 @@ function ReviewContent() {
   const [loading, setLoading] = useState(true);
   const [evaluating, setEvaluating] = useState(false);
   const [submittedStatus, setSubmittedStatus] = useState<number | null>(null);
+  const [showNextBtn, setShowNextBtn] = useState(false);
 
   const fetchQuestion = useCallback(() => {
     setLoading(true);
@@ -30,8 +35,10 @@ function ReviewContent() {
     setUserAnswer('');
     setAiEvaluation('');
     setSubmittedStatus(null);
+    setShowNextBtn(false);
 
-    fetch(`/api/questions/review?category=${encodeURIComponent(category)}`)
+    const url = `/api/questions/review?category=${encodeURIComponent(category)}&mode=${mode}&lastId=${lastId}${onlyVague ? '&onlyVague=true' : ''}`;
+    fetch(url)
       .then(res => res.json())
       .then(data => {
         if (data.message) {
@@ -42,7 +49,7 @@ function ReviewContent() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [category]);
+  }, [category, mode, lastId, onlyVague]);
 
   useEffect(() => {
     fetchQuestion();
@@ -56,20 +63,17 @@ function ReviewContent() {
     setShowAnswer(true);
 
     try {
-      // 并行：获取 AI 评价 + 更新复习状态
-      const [aiRes] = await Promise.all([
-        fetch('/api/ai/evaluate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            questionContent: question.content,
-            standardAnswer: question.standardAns,
-            userAnswer: userAnswer,
-          }),
+      const res = await fetch('/api/ai/evaluate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          questionContent: question.content,
+          standardAnswer: question.standardAns,
+          userAnswer: userAnswer,
         }),
-      ]);
+      });
 
-      const aiData = await aiRes.json();
+      const aiData = await res.json();
       setAiEvaluation(aiData.evaluation || aiData.error || '评价获取失败');
     } catch {
       setAiEvaluation('AI 评价暂时不可用');
@@ -89,9 +93,10 @@ function ReviewContent() {
       body: JSON.stringify({ questionId: question.id, status: 0 }),
     });
     setSubmittedStatus(0);
+    setShowNextBtn(true);
   };
 
-  // 标记掌握程度并进入下一题
+  // 标记掌握程度
   const handleRate = async (status: number) => {
     if (!question) return;
 
@@ -105,136 +110,169 @@ function ReviewContent() {
       }),
     });
     setSubmittedStatus(status);
-    // 短暂延迟后进入下一题
-    setTimeout(() => fetchQuestion(), 500);
+    setShowNextBtn(true);
   };
 
-  if (loading) {
-    return (
-      <div className="loading">
-        <div className="spinner"></div>
-        <p>正在抽背题目...</p>
-      </div>
-    );
-  }
+  const handleNext = () => {
+    if (question) {
+      if (mode === 'sequential') {
+        setLastId(question.id);
+      } else {
+        // 如果是其他模式，只要强制重新加载 fetch 就可以了。
+        // 因为 useCallback 的限制，如果 mode/lastId 不变，不会刷新。我们可以加个时间戳 hack 或显式调用。
+        fetchQuestion();
+      }
+    }
+  };
 
-  if (!question) {
-    return (
-      <>
-        <Link href="/" className="back-link">← 返回首页</Link>
-        <div className="empty-state">
-          <div className="empty-icon">🎉</div>
-          <h3>暂无{category}待复习的题目</h3>
-          <p>所有题目都复习完毕，或题库为空。</p>
-          <Link href="/manage">
-            <button className="btn btn-primary" style={{ marginTop: '1rem' }}>去导入题目</button>
-          </Link>
-        </div>
-      </>
-    );
-  }
+  // 改变模式时重置
+  const handleModeChange = (newMode: 'sm2' | 'sequential' | 'random') => {
+    setMode(newMode);
+    setLastId(0);
+  };
 
   return (
     <>
-      <Link href="/" className="back-link">← 返回首页</Link>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', alignItems: 'center', marginBottom: '1.5rem' }}>
+        <div style={{ width: '100%', textAlign: 'left' }}>
+          <Link href="/" className="back-link" style={{ marginBottom: 0 }}>← 返回首页</Link>
+        </div>
+
+        {/* 模式选择 */}
+        {!onlyVague && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '0.5rem', background: 'var(--bg-card)', padding: '0.3rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+            <button className={`nav-btn ${mode === 'sm2' ? 'active' : ''}`} onClick={() => handleModeChange('sm2')}>
+              🧠 智能分布
+            </button>
+            <button className={`nav-btn ${mode === 'sequential' ? 'active' : ''}`} onClick={() => handleModeChange('sequential')}>
+              1️⃣ 顺序
+            </button>
+            <button className={`nav-btn ${mode === 'random' ? 'active' : ''}`} onClick={() => handleModeChange('random')}>
+              🎲 随机
+            </button>
+          </div>
+        )}
+      </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
         <h2 style={{ fontSize: '1.5rem', fontWeight: 700 }}>
-          {category === '专业课' ? '📝' : '💡'} {category}抽背练习
+          {category === '专业课' ? '📝' : '💡'} {category}抽背 {onlyVague && <span style={{ color: 'var(--danger)', fontSize: '1rem' }}>(错题复习)</span>}
         </h2>
       </div>
 
-      {/* 题目展示 */}
-      <div className="card question-card slide-up">
-        <div className="question-number">
-          📌 题目 #{question.id}
-          {question.reviews?.[0] && (
-            <span className={`badge ${
-              question.reviews[0].status === 2 ? 'badge-success' :
-              question.reviews[0].status === 1 ? 'badge-warning' : 'badge-danger'
-            }`} style={{ marginLeft: '0.5rem' }}>
-              {question.reviews[0].status === 2 ? '已掌握' :
-               question.reviews[0].status === 1 ? '模糊' : '待复习'}
-            </span>
-          )}
+      {loading ? (
+        <div className="loading">
+          <div className="spinner"></div>
+          <p>正在拉取题目...</p>
         </div>
-        <div className="question-content">{question.content}</div>
-      </div>
-
-      {/* 回答区域 */}
-      {!showAnswer && (
-        <div className="card slide-up" style={{ animationDelay: '0.1s' }}>
-          <div className="answer-section">
-            <label>✏️ 你的回答</label>
-            <textarea
-              rows={6}
-              placeholder={'输入你的回答...（也可以点击"不知道"直接查看标准答案）'}
-              value={userAnswer}
-              onChange={(e) => setUserAnswer(e.target.value)}
-            />
-          </div>
-          <div className="btn-group" style={{ marginTop: '1rem' }}>
-            <button className="btn btn-primary" onClick={handleSubmit} disabled={!userAnswer.trim()}>
-              📤 提交回答并获取AI点评
-            </button>
-            <button className="btn btn-danger" onClick={handleDontKnow}>
-              🤷 不知道，直接看答案
-            </button>
+      ) : !question ? (
+        <div className="empty-state">
+          <div className="empty-icon">🎉</div>
+          <h3>暂无{category}待复习的题目</h3>
+          <p>{onlyVague ? '恭喜，没有错题！' : '所有题目都复习完毕，或题库为空。'}</p>
+          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginTop: '1.5rem' }}>
+            <button className="btn btn-outline" onClick={() => fetchQuestion()}>🔄 重新尝试拉取</button>
+            <Link href="/manage">
+              <button className="btn btn-primary">去导入题目</button>
+            </Link>
           </div>
         </div>
-      )}
-
-      {/* 标准答案 */}
-      {showAnswer && (
-        <div className="slide-up">
-          <div className="standard-answer">
-            <h4>📗 标准答案</h4>
-            <div style={{ whiteSpace: 'pre-wrap' }}>{question.standardAns}</div>
+      ) : (
+        <>
+          {/* 题目展示 */}
+          <div className="card question-card slide-up">
+            <div className="question-number">
+              📌 题目 #{question.id}
+              {question.reviews?.[0] && (
+                <span className={`badge ${question.reviews[0].status === 2 ? 'badge-success' :
+                  question.reviews[0].status === 1 ? 'badge-warning' : 'badge-danger'
+                  }`} style={{ marginLeft: '0.5rem' }}>
+                  上次评价: {question.reviews[0].status === 2 ? '已掌握' :
+                    question.reviews[0].status === 1 ? '模糊' : '不会'}
+                </span>
+              )}
+            </div>
+            <div className="question-content">{question.content}</div>
           </div>
 
-          {/* AI 评价 */}
-          {evaluating && (
-            <div className="loading" style={{ marginTop: '1rem' }}>
-              <div className="spinner"></div>
-              <p>🤖 AI 考官正在评价你的回答...</p>
-            </div>
-          )}
-
-          {aiEvaluation && (
-            <div className="ai-evaluation fade-in">
-              <h4>🤖 AI 考官点评</h4>
-              <div>{aiEvaluation}</div>
-            </div>
-          )}
-
-          {/* 掌握度评价 */}
-          {submittedStatus === null && (
-            <div className="card fade-in" style={{ marginTop: '1.5rem' }}>
-              <div className="card-title">你觉得这道题掌握得怎么样？</div>
-              <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem', fontSize: '0.9rem' }}>
-                你的评价将影响这道题下次出现的时间（记忆曲线）
-              </p>
-              <div className="btn-group">
-                <button className="btn btn-danger" onClick={() => handleRate(0)}>
-                  ❌ 不会
+          {/* 回答区域 */}
+          {!showAnswer && (
+            <div className="card slide-up" style={{ animationDelay: '0.1s' }}>
+              <div className="answer-section" style={{ marginTop: 0 }}>
+                <label>✏️ 你的回答</label>
+                <textarea
+                  rows={5}
+                  placeholder={'输入你的回答...（也可以点击"不知道"直接查看标准答案）'}
+                  value={userAnswer}
+                  onChange={(e) => setUserAnswer(e.target.value)}
+                />
+              </div>
+              <div className="btn-group" style={{ marginTop: '1.5rem' }}>
+                <button className="btn btn-primary" onClick={handleSubmit} disabled={!userAnswer.trim()}>
+                  📤 提交回答，让 AI 评价
                 </button>
-                <button className="btn btn-warning" onClick={() => handleRate(1)}>
-                  🤔 模糊
-                </button>
-                <button className="btn btn-success" onClick={() => handleRate(2)}>
-                  ✅ 掌握
+                <button className="btn btn-danger" onClick={handleDontKnow}>
+                  🤷‍♂️ 不知道，直接看答案
                 </button>
               </div>
             </div>
           )}
 
-          {submittedStatus !== null && (
-            <div className="loading fade-in" style={{ marginTop: '1rem' }}>
-              <div className="spinner"></div>
-              <p>正在加载下一题...</p>
+          {/* 标准答案与结果 */}
+          {showAnswer && (
+            <div className="slide-up">
+              <div className="standard-answer">
+                <h4>📗 标准答案</h4>
+                <div style={{ whiteSpace: 'pre-wrap' }}>{question.standardAns}</div>
+              </div>
+
+              {/* AI 评价 */}
+              {evaluating && (
+                <div className="loading" style={{ marginTop: '1rem' }}>
+                  <div className="spinner"></div>
+                  <p>🤖 AI 考官正在评价你的回答...</p>
+                </div>
+              )}
+
+              {aiEvaluation && (
+                <div className="ai-evaluation fade-in">
+                  <h4>🤖 AI 考官点评</h4>
+                  <div style={{ whiteSpace: 'pre-wrap' }}>{aiEvaluation}</div>
+                </div>
+              )}
+
+              {/* 掌握度评价 (未评价之前) */}
+              {submittedStatus === null && !evaluating && (
+                <div className="card fade-in" style={{ marginTop: '1.5rem', borderColor: 'var(--primary)' }}>
+                  <div className="card-title">评价这道题掌握得怎么样？</div>
+                  <p style={{ color: 'var(--text-secondary)', marginBottom: '1rem', fontSize: '0.9rem' }}>
+                    你的真实评价将决定这道题下次出现的时机
+                  </p>
+                  <div className="btn-group">
+                    <button className="btn btn-danger" onClick={() => handleRate(0)}>
+                      ❌ 不会
+                    </button>
+                    <button className="btn btn-warning" onClick={() => handleRate(1)}>
+                      🤔 模糊
+                    </button>
+                    <button className="btn btn-success" onClick={() => handleRate(2)}>
+                      ✅ 掌握
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* 已评价后的下一题按钮 */}
+              {showNextBtn && (
+                <div className="fade-in" style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+                  <button className="btn btn-primary btn-lg" onClick={handleNext} style={{ width: '100%', maxWidth: '300px' }}>
+                    ➡ 下一题
+                  </button>
+                </div>
+              )}
             </div>
           )}
-        </div>
+        </>
       )}
     </>
   );

@@ -211,6 +211,9 @@ body::before {
 .action-card.exam-action::before {
   background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(251, 191, 36, 0.05));
 }
+.action-card.error-action::before {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(248, 113, 113, 0.05));
+}
 .action-card .action-icon {
   font-size: 3rem;
   margin-bottom: 1rem;
@@ -546,19 +549,58 @@ textarea::placeholder, input::placeholder {
     grid-template-columns: 1fr 1fr;
   }
   .action-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
   }
   .btn-group {
-    flex-direction: column;
+    gap: 0.5rem;
   }
   .btn-group .btn {
-    width: 100%;
+    flex: 1 1 auto;
+    font-size: 0.9rem;
+    padding: 0.6rem 1rem;
+    text-align: center;
+    justify-content: center;
   }
 }
 
 @media (max-width: 480px) {
   .dashboard-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+  .stat-card {
+    text-align: center;
+    padding: 1rem 0.5rem;
+  }
+  .stat-card .stat-icon {
+    font-size: 2rem;
+  }
+  .stat-card .stat-value {
+    font-size: 1.8rem;
+  }
+  .action-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+  .action-card {
+    padding: 1.25rem 0.75rem;
+  }
+  .action-card .action-icon {
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+  }
+  .action-card .action-title {
+    font-size: 1.05rem;
+  }
+  .action-card .action-desc {
+    font-size: 0.75rem;
+  }
+  .header h1 {
+    font-size: 1.4rem;
+  }
+  .card {
+    padding: 1rem;
   }
 }
 
