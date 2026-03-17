@@ -12,6 +12,8 @@ interface Question {
 }
 
 export default function ManagePage() {
+  const [authLoading, setAuthLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -19,11 +21,12 @@ export default function ManagePage() {
   const [importText, setImportText] = useState('');
   const [importing, setImporting] = useState(false);
   const [message, setMessage] = useState('');
+  const getCategoryLabel = (category: string) => category === '专业课' ? '真题' : '拓展题库';
 
   const fetchQuestions = (category?: string) => {
     setLoading(true);
     const url = category ? `/api/questions?category=${encodeURIComponent(category)}` : '/api/questions';
-    fetch(url)
+    fetch(url, { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
         setQuestions(data.questions || []);
@@ -34,7 +37,24 @@ export default function ManagePage() {
   };
 
   useEffect(() => {
-    fetchQuestions();
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then((res) => res.json())
+      .then((data) => {
+        const admin = data.user?.role === 'admin';
+        setIsAdmin(admin);
+        if (admin) {
+          fetchQuestions();
+        } else {
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        setIsAdmin(false);
+        setLoading(false);
+      })
+      .finally(() => {
+        setAuthLoading(false);
+      });
   }, []);
 
   // 批量导入
@@ -192,6 +212,7 @@ export default function ManagePage() {
       const res = await fetch('/api/questions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ questions: parsedQuestions }),
       });
 
@@ -216,132 +237,157 @@ export default function ManagePage() {
 
       <h2 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '1.5rem' }}>📚 题库管理</h2>
 
-      {/* 导入区域 */}
-      <div className="card slide-up" style={{ marginBottom: '1.5rem' }}>
-        <div className="card-title">📥 导入题目</div>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '1rem' }}>
-          支持多种格式：<br />
-          <strong>格式一：</strong> 每道题用空行分隔，题目和答案之间用 <code>---</code> 分隔<br />
-          <strong>格式二：</strong> JSON 数组 <code>[{`{"content":"题目","standardAns":"答案"}`}]</code><br />
-          <strong>格式三：</strong> Gemini 输出的嵌套 JSON（如 <code>{`{"真题题库":[...]}`}</code>，开头有多余文字也没关系）
-        </p>
-
-        <div className="import-section">
-          <div style={{ marginBottom: '1rem', display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div>
-              <label style={{ marginRight: '0.75rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                导入至分类：
-              </label>
-              <select
-                value={importCategory}
-                onChange={e => setImportCategory(e.target.value)}
-              >
-                <option value="专业课">专业课</option>
-                <option value="综合素质">综合素质</option>
-              </select>
-            </div>
-            <label className="btn btn-outline" style={{ cursor: 'pointer' }}>
-              📂 从文件导入
-              <input
-                type="file"
-                accept=".txt,.json"
-                style={{ display: 'none' }}
-                onChange={e => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    const reader = new FileReader();
-                    reader.onload = (ev) => {
-                      setImportText(ev.target?.result as string || '');
-                    };
-                    reader.readAsText(file, 'utf-8');
-                  }
-                  e.target.value = '';
-                }}
-              />
-            </label>
+      {authLoading ? (
+        <div className="loading">
+          <div className="spinner"></div>
+          <p>正在校验管理员权限...</p>
+        </div>
+      ) : !isAdmin ? (
+        <div className="card fade-in">
+          <div className="card-title">仅管理员可管理公共题库</div>
+          <p style={{ color: 'var(--text-secondary)', lineHeight: 1.8 }}>
+            当前系统的 286 道基础题库对所有用户共享。为了防止公共题库被误改，只有管理员可以继续导入或删除题目。
+          </p>
+          <div className="btn-group" style={{ marginTop: '1.5rem' }}>
+            <Link href="/">
+              <button className="btn btn-primary">返回首页</button>
+            </Link>
+            <Link href="/review?category=专业课">
+              <button className="btn btn-outline">去真题抽背</button>
+            </Link>
           </div>
+        </div>
+      ) : (
+        <>
 
-          <textarea
-            rows={12}
-            placeholder={`示例（格式一）：\n\n什么是操作系统？\n---\n操作系统是管理计算机硬件和软件资源的系统软件...\n\n什么是进程和线程的区别？\n---\n进程是资源分配的基本单位，线程是CPU调度的基本单位...`}
-            value={importText}
-            onChange={e => setImportText(e.target.value)}
-          />
-
-          {message && (
-            <p style={{
-              marginTop: '0.75rem',
-              padding: '0.75rem',
-              borderRadius: 'var(--radius-sm)',
-              background: message.startsWith('✅') ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-              color: message.startsWith('✅') ? 'var(--success)' : 'var(--danger)',
-              fontSize: '0.9rem',
-            }}>
-              {message}
+          {/* 导入区域 */}
+          <div className="card slide-up" style={{ marginBottom: '1.5rem' }}>
+            <div className="card-title">📥 导入题目</div>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '1rem' }}>
+              支持多种格式：<br />
+              <strong>格式一：</strong> 每道题用空行分隔，题目和答案之间用 <code>---</code> 分隔<br />
+              <strong>格式二：</strong> JSON 数组 <code>[{`{"content":"题目","standardAns":"答案"}`}]</code><br />
+              <strong>格式三：</strong> Gemini 输出的嵌套 JSON（如 <code>{`{"真题题库":[...]}`}</code>，开头有多余文字也没关系）
             </p>
-          )}
 
-          <button
-            className="btn btn-primary"
-            style={{ marginTop: '1rem' }}
-            onClick={handleImport}
-            disabled={importing || !importText.trim()}
-          >
-            {importing ? '⏳ 导入中...' : '📤 开始导入'}
-          </button>
-        </div>
-      </div>
-
-      {/* 题目列表 */}
-      <div className="card fade-in">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-          <div className="card-title" style={{ margin: 0 }}>📋 题目列表（共 {total} 题）</div>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button className="nav-btn" onClick={() => fetchQuestions()}>全部</button>
-            <button className="nav-btn" onClick={() => fetchQuestions('专业课')}>专业课</button>
-            <button className="nav-btn" onClick={() => fetchQuestions('综合素质')}>综合素质</button>
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="loading">
-            <div className="spinner"></div>
-          </div>
-        ) : questions.length === 0 ? (
-          <div className="empty-state" style={{ padding: '2rem' }}>
-            <p>暂无题目，请先导入</p>
-          </div>
-        ) : (
-          <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
-            {questions.map((q, i) => (
-              <div key={q.id} style={{
-                padding: '0.75rem 1rem',
-                borderBottom: '1px solid var(--border)',
-                display: 'flex',
-                alignItems: 'flex-start',
-                gap: '0.75rem',
-              }}>
-                <span style={{
-                  fontSize: '0.8rem',
-                  color: 'var(--text-muted)',
-                  minWidth: '2rem',
-                  paddingTop: '2px',
-                }}>
-                  {i + 1}.
-                </span>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '0.9rem', marginBottom: '0.25rem' }}>
-                    {q.content.length > 80 ? q.content.slice(0, 80) + '...' : q.content}
-                  </div>
-                  <span className={`badge ${q.category === '专业课' ? 'badge-info' : 'badge-warning'}`}>
-                    {q.category}
-                  </span>
+            <div className="import-section">
+              <div style={{ marginBottom: '1rem', display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div>
+                  <label style={{ marginRight: '0.75rem', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                    导入至分类：
+                  </label>
+                  <select
+                    value={importCategory}
+                    onChange={e => setImportCategory(e.target.value)}
+                  >
+                    <option value="专业课">真题</option>
+                    <option value="综合素质">拓展题库</option>
+                  </select>
                 </div>
+                <label className="btn btn-outline" style={{ cursor: 'pointer' }}>
+                  📂 从文件导入
+                  <input
+                    type="file"
+                    accept=".txt,.json"
+                    style={{ display: 'none' }}
+                    onChange={e => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          setImportText(ev.target?.result as string || '');
+                        };
+                        reader.readAsText(file, 'utf-8');
+                      }
+                      e.target.value = '';
+                    }}
+                  />
+                </label>
               </div>
-            ))}
+
+              <textarea
+                rows={12}
+                placeholder={`示例（格式一）：\n\n什么是操作系统？\n---\n操作系统是管理计算机硬件和软件资源的系统软件...\n\n什么是进程和线程的区别？\n---\n进程是资源分配的基本单位，线程是CPU调度的基本单位...`}
+                value={importText}
+                onChange={e => setImportText(e.target.value)}
+              />
+
+              {message && (
+                <p style={{
+                  marginTop: '0.75rem',
+                  padding: '0.75rem',
+                  borderRadius: 'var(--radius-sm)',
+                  background: message.startsWith('✅') ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                  color: message.startsWith('✅') ? 'var(--success)' : 'var(--danger)',
+                  fontSize: '0.9rem',
+                }}>
+                  {message}
+                </p>
+              )}
+
+              <button
+                className="btn btn-primary"
+                style={{ marginTop: '1rem' }}
+                onClick={handleImport}
+                disabled={importing || !importText.trim()}
+              >
+                {importing ? '⏳ 导入中...' : '📤 开始导入'}
+              </button>
+            </div>
           </div>
-        )}
-      </div>
+
+          {/* 题目列表 */}
+          <div className="card fade-in">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <div className="card-title" style={{ margin: 0 }}>📋 题目列表（共 {total} 题）</div>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button className="nav-btn" onClick={() => fetchQuestions()}>全部</button>
+                <button className="nav-btn" onClick={() => fetchQuestions('专业课')}>真题</button>
+                <button className="nav-btn" onClick={() => fetchQuestions('综合素质')}>拓展题库</button>
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="loading">
+                <div className="spinner"></div>
+              </div>
+            ) : questions.length === 0 ? (
+              <div className="empty-state" style={{ padding: '2rem' }}>
+                <p>暂无题目，请先导入</p>
+              </div>
+            ) : (
+              <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                {questions.map((q, i) => (
+                  <div key={q.id} style={{
+                    padding: '0.75rem 1rem',
+                    borderBottom: '1px solid var(--border)',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '0.75rem',
+                  }}>
+                    <span style={{
+                      fontSize: '0.8rem',
+                      color: 'var(--text-muted)',
+                      minWidth: '2rem',
+                      paddingTop: '2px',
+                    }}>
+                      {i + 1}.
+                    </span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '0.9rem', marginBottom: '0.25rem' }}>
+                        {q.content.length > 80 ? q.content.slice(0, 80) + '...' : q.content}
+                      </div>
+                      <span className={`badge ${q.category === '专业课' ? 'badge-info' : 'badge-warning'}`}>
+                        {getCategoryLabel(q.category)}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </>
   );
 }

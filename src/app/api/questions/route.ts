@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { isCurrentUserAdmin } from '@/lib/auth';
 
 // GET: 获取所有题目（分页）
 export async function GET(request: Request) {
@@ -13,7 +14,6 @@ export async function GET(request: Request) {
   const [questions, total] = await Promise.all([
     prisma.question.findMany({
       where,
-      include: { reviews: true },
       skip: (page - 1) * pageSize,
       take: pageSize,
       orderBy: { id: 'asc' },
@@ -24,8 +24,12 @@ export async function GET(request: Request) {
   return NextResponse.json({ questions, total, page, pageSize });
 }
 
-// POST: 批量导入题目
+// POST: 批量导入题目（仅管理员）
 export async function POST(request: Request) {
+  if (!(await isCurrentUserAdmin())) {
+    return NextResponse.json({ error: '只有管理员可以导入公共题库' }, { status: 403 });
+  }
+
   const body = await request.json();
   const { questions } = body;
   // questions: [{ content, standardAns, category?, tags? }]
@@ -46,8 +50,12 @@ export async function POST(request: Request) {
   return NextResponse.json({ count: created.count, message: `成功导入 ${created.count} 道题目` });
 }
 
-// DELETE: 清空某个类别的题目
+// DELETE: 清空某个类别的题目（仅管理员）
 export async function DELETE(request: Request) {
+  if (!(await isCurrentUserAdmin())) {
+    return NextResponse.json({ error: '只有管理员可以删除公共题库' }, { status: 403 });
+  }
+
   const { searchParams } = new URL(request.url);
   const category = searchParams.get('category');
 

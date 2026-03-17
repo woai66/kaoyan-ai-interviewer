@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 // 直接从文件导入题库到数据库的脚本（容错版）
 // 用法: node scripts/import.js <文件路径> [分类]
 // 例如: node scripts/import.js "C:\Users\zyq\Desktop\真题题库.txt" 专业课

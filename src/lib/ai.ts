@@ -49,7 +49,7 @@ ${userAnswer}
 }
 
 /**
- * 模拟考场模式：综合评分两道综合素质题
+ * 模拟考场模式：综合评分两道拓展题库题目
  */
 export async function scoreExam(
   questions: { content: string; standardAnswer: string; userAnswer: string }[]
@@ -66,7 +66,7 @@ export async function scoreExam(
     messages: [
       {
         role: 'system',
-        content: `你是一位严格的考研复试面试评委组组长。面试的专业面试环节满分100分，包含两道考核学生综合素质、创新及应用能力的开放性问答题（每题50分）。
+        content: `你是一位严格的考研复试面试评委组组长。面试环节满分100分，包含两道来自拓展题库、重点考核学生综合素质、创新及应用能力的开放性问答题（每题50分）。
 
 请根据以下评分标准对学生的回答进行综合评分：
 - **知识掌握程度** (30%)：对核心概念的理解是否准确
