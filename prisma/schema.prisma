@@ -7,6 +7,37 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// 用户表
+model User {
+  id           Int          @id @default(autoincrement())
+  email        String       @unique @db.VarChar(255)
+  passwordHash String       @db.VarChar(255)
+  name         String?      @db.VarChar(100)
+  role         String       @default("user") @db.VarChar(20) // user | admin
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @default(now()) @updatedAt
+
+  sessions     Session[]
+  reviews      Review[]
+  examRecords  ExamRecord[]
+
+  @@map("users")
+}
+
+// 登录会话表
+model Session {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  token     String   @unique @db.VarChar(64)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
 // 题目表
 model Question {
   id          Int      @id @default(autoincrement())
@@ -24,6 +55,7 @@ model Question {
 // 复习记录表 (SM-2 记忆曲线)
 model Review {
   id            Int      @id @default(autoincrement())
+  userId        Int?
   questionId    Int
   status        Int      @default(0)    // 0-不知道, 1-模糊, 2-熟练
   easeFactor    Float    @default(2.5)  // SM-2 难度因子
@@ -35,18 +67,24 @@ model Review {
   updatedAt     DateTime @updatedAt
 
   question      Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  user          User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([questionId])
+  @@index([userId])
+  @@unique([userId, questionId])
   @@map("reviews")
 }
 
 // 模拟考试记录表
 model ExamRecord {
   id           Int      @id @default(autoincrement())
+  userId       Int?
   questions    String   @db.Text       // JSON: [{questionId, content, userAnswer}]
   totalScore   Int      @default(0)    // 总分 0-100
   aiEvaluation String?  @db.Text       // AI 综合评价
   createdAt    DateTime @default(now())
 
+  user         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
   @@map("exam_records")
 }

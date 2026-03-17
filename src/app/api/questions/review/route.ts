@@ -1,8 +1,14 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getCurrentUserId } from '@/lib/auth';
 
 // GET: 获取待复习的题目（基于记忆曲线）
 export async function GET(request: Request) {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return NextResponse.json({ error: '请先登录' }, { status: 401 });
+  }
+
   const { searchParams } = new URL(request.url);
   const category = searchParams.get('category') || '专业课';
   const mode = searchParams.get('mode') || 'sm2';
@@ -18,6 +24,7 @@ export async function GET(request: Request) {
   if (onlyVague) {
     baseWhere.reviews = {
       some: {
+        userId,
         status: { in: [0, 1] }
       }
     };
@@ -26,7 +33,7 @@ export async function GET(request: Request) {
   if (mode === 'sequential') {
     const question = await prisma.question.findFirst({
       where: { ...baseWhere, id: { gt: lastId } },
-      include: { reviews: true },
+      include: { reviews: { where: { userId } } },
       orderBy: { id: 'asc' },
     });
     if (question) return NextResponse.json(question);
@@ -43,7 +50,7 @@ export async function GET(request: Request) {
     const skip = Math.floor(Math.random() * count);
     const random = await prisma.question.findFirst({
       where: baseWhere,
-      include: { reviews: true },
+      include: { reviews: { where: { userId } } },
       skip,
     });
     return NextResponse.json(random);
@@ -56,12 +63,13 @@ export async function GET(request: Request) {
       category,
       reviews: {
         some: {
+          userId,
           nextReview: { lte: now }
         }
       }
     },
-    include: { reviews: true },
-    orderBy: { reviews: { _count: 'asc' } }
+    include: { reviews: { where: { userId } } },
+    orderBy: { id: 'asc' }
   });
 
   if (reviewDue) {
@@ -72,9 +80,14 @@ export async function GET(request: Request) {
   const newQuestion = await prisma.question.findFirst({
     where: {
       category,
-      reviews: { none: {} }
+      reviews: {
+        none: {
+          userId,
+        }
+      }
     },
-    include: { reviews: true },
+    include: { reviews: { where: { userId } } },
+    orderBy: { id: 'asc' },
   });
 
   if (newQuestion) {
@@ -89,7 +102,7 @@ export async function GET(request: Request) {
   const skip = Math.floor(Math.random() * count);
   const random = await prisma.question.findFirst({
     where: { category },
-    include: { reviews: true },
+    include: { reviews: { where: { userId } } },
     skip,
   });
 

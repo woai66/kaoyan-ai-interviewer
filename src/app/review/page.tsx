@@ -9,13 +9,14 @@ interface Question {
   content: string;
   standardAns: string;
   category: string;
-  reviews: { status: number; nextReview: string }[];
+  reviews: { status: number; nextReview: string; lastAiReview?: string | null }[];
 }
 
 function ReviewContent() {
   const searchParams = useSearchParams();
   const category = searchParams.get('category') || '专业课';
   const onlyVague = searchParams.get('onlyVague') === 'true';
+  const categoryLabel = category === '专业课' ? '真题' : '拓展题库';
 
   const [mode, setMode] = useState<'sm2' | 'sequential' | 'random'>('sm2');
   const [lastId, setLastId] = useState(0);
@@ -28,9 +29,16 @@ function ReviewContent() {
   const [evaluating, setEvaluating] = useState(false);
   const [submittedStatus, setSubmittedStatus] = useState<number | null>(null);
   const [showNextBtn, setShowNextBtn] = useState(false);
+  const [pageError, setPageError] = useState('');
+
+  const redirectToLogin = useCallback(() => {
+    const target = `/login?from=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+    window.location.href = target;
+  }, []);
 
   const fetchQuestion = useCallback(() => {
     setLoading(true);
+    setPageError('');
     setShowAnswer(false);
     setUserAnswer('');
     setAiEvaluation('');
@@ -39,9 +47,22 @@ function ReviewContent() {
 
     const url = `/api/questions/review?category=${encodeURIComponent(category)}&mode=${mode}&lastId=${lastId}${onlyVague ? '&onlyVague=true' : ''}`;
     fetch(url)
-      .then(res => res.json())
+      .then(async (res) => {
+        const data = await res.json();
+        if (res.status === 401) {
+          redirectToLogin();
+          return null;
+        }
+        return data;
+      })
       .then(data => {
+        if (!data) {
+          return;
+        }
         if (data.message) {
+          setQuestion(null);
+        } else if (data.error) {
+          setPageError(data.error);
           setQuestion(null);
         } else {
           setQuestion(data);
@@ -49,7 +70,7 @@ function ReviewContent() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, [category, mode, lastId, onlyVague]);
+  }, [category, mode, lastId, onlyVague, redirectToLogin]);
 
   useEffect(() => {
     fetchQuestion();
@@ -66,6 +87,7 @@ function ReviewContent() {
       const res = await fetch('/api/ai/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           questionContent: question.content,
           standardAnswer: question.standardAns,
@@ -74,6 +96,10 @@ function ReviewContent() {
       });
 
       const aiData = await res.json();
+      if (res.status === 401) {
+        redirectToLogin();
+        return;
+      }
       setAiEvaluation(aiData.evaluation || aiData.error || '评价获取失败');
     } catch {
       setAiEvaluation('AI 评价暂时不可用');
@@ -87,11 +113,16 @@ function ReviewContent() {
     if (!question) return;
     setShowAnswer(true);
 
-    await fetch('/api/reviews', {
+    const res = await fetch('/api/reviews', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({ questionId: question.id, status: 0 }),
     });
+    if (res.status === 401) {
+      redirectToLogin();
+      return;
+    }
     setSubmittedStatus(0);
     setShowNextBtn(true);
   };
@@ -100,15 +131,21 @@ function ReviewContent() {
   const handleRate = async (status: number) => {
     if (!question) return;
 
-    await fetch('/api/reviews', {
+    const res = await fetch('/api/reviews', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       body: JSON.stringify({
         questionId: question.id,
         status,
         userAnswer: userAnswer || undefined,
+        aiEvaluation: aiEvaluation || undefined,
       }),
     });
+    if (res.status === 401) {
+      redirectToLogin();
+      return;
+    }
     setSubmittedStatus(status);
     setShowNextBtn(true);
   };
@@ -156,7 +193,7 @@ function ReviewContent() {
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem' }}>
         <h2 style={{ fontSize: '1.5rem', fontWeight: 700 }}>
-          {category === '专业课' ? '📝' : '💡'} {category}抽背 {onlyVague && <span style={{ color: 'var(--danger)', fontSize: '1rem' }}>(错题复习)</span>}
+          {category === '专业课' ? '📝' : '💡'} {categoryLabel}抽背 {onlyVague && <span style={{ color: 'var(--danger)', fontSize: '1rem' }}>(错题复习)</span>}
         </h2>
       </div>
 
@@ -165,10 +202,24 @@ function ReviewContent() {
           <div className="spinner"></div>
           <p>正在拉取题目...</p>
         </div>
+      ) : pageError ? (
+        <div className="empty-state">
+          <div className="empty-icon">⚠️</div>
+          <h3>暂时无法开始抽背</h3>
+          <p>{pageError}</p>
+          <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginTop: '1.5rem' }}>
+            <Link href="/login">
+              <button className="btn btn-primary">去登录</button>
+            </Link>
+            <Link href="/">
+              <button className="btn btn-outline">返回首页</button>
+            </Link>
+          </div>
+        </div>
       ) : !question ? (
         <div className="empty-state">
           <div className="empty-icon">🎉</div>
-          <h3>暂无{category}待复习的题目</h3>
+          <h3>暂无{categoryLabel}待复习的题目</h3>
           <p>{onlyVague ? '恭喜，没有错题！' : '所有题目都复习完毕，或题库为空。'}</p>
           <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', marginTop: '1.5rem' }}>
             <button className="btn btn-outline" onClick={() => fetchQuestion()}>🔄 重新尝试拉取</button>

@@ -1,15 +1,21 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getCurrentUserId } from '@/lib/auth';
 
-// GET: 随机抽取 2 道综合素质题用于模拟考场
+// GET: 随机抽取 2 道拓展题库题目用于模拟考场
 export async function GET() {
+  const userId = await getCurrentUserId();
+  if (!userId) {
+    return NextResponse.json({ error: '请先登录' }, { status: 401 });
+  }
+
   const count = await prisma.question.count({
     where: { category: '综合素质' }
   });
 
   if (count < 2) {
     return NextResponse.json(
-      { message: '综合素质题目不足 2 道，请先导入题目' },
+      { message: '拓展题库题目不足 2 道，请先导入题目' },
       { status: 404 }
     );
   }
@@ -25,7 +31,6 @@ export async function GET() {
 
   const questions = await prisma.question.findMany({
     where: { id: { in: selectedIds } },
-    include: { reviews: true },
   });
 
   return NextResponse.json(questions);

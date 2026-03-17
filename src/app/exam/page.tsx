@@ -17,12 +17,22 @@ export default function ExamPage() {
   const [result, setResult] = useState<{ score: number; evaluation: string } | null>(null);
   const [error, setError] = useState('');
 
+  const redirectToLogin = () => {
+    const target = `/login?from=${encodeURIComponent(window.location.pathname + window.location.search)}`;
+    window.location.href = target;
+  };
+
   // 开始考试：抽取两道题
   const startExam = async () => {
     setError('');
     try {
-      const res = await fetch('/api/questions/exam');
+      const res = await fetch('/api/questions/exam', { credentials: 'include' });
       const data = await res.json();
+
+      if (res.status === 401) {
+        redirectToLogin();
+        return;
+      }
 
       if (data.message) {
         setError(data.message);
@@ -52,6 +62,7 @@ export default function ExamPage() {
       const res = await fetch('/api/ai/score-exam', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           questions: questions.map((q, i) => ({
             id: q.id,
@@ -63,6 +74,10 @@ export default function ExamPage() {
       });
 
       const data = await res.json();
+      if (res.status === 401) {
+        redirectToLogin();
+        return;
+      }
       if (data.error) {
         setError(data.error);
         setPhase('answering');
@@ -90,7 +105,7 @@ export default function ExamPage() {
           </h2>
           <p style={{ color: 'var(--text-secondary)', marginBottom: '0.5rem', maxWidth: '500px', margin: '0 auto 1.5rem' }}>
             模拟真实考研复试专业面试环节<br />
-            系统将随机抽取 <strong>2 道综合素质题</strong>，你需要依次作答<br />
+            系统将随机抽取 <strong>2 道拓展题库题目</strong>，你需要依次作答<br />
             全部作答完毕后，AI 考官将给出综合评分（满分100分）
           </p>
 
@@ -155,7 +170,7 @@ export default function ExamPage() {
         {/* 当前题目 */}
         <div className="card question-card slide-up" key={currentQ}>
           <div className="question-number">
-            📌 第{currentQ + 1}题 / 共2题 · 综合素质（50分）
+            📌 第{currentQ + 1}题 / 共2题 · 拓展题库（50分）
           </div>
           <div className="question-content">{questions[currentQ]?.content}</div>
         </div>
